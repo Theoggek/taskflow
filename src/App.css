@@ -916,3 +916,87 @@ kbd {
 .weekly-task-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-muted); }
 .weekly-task-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .weekly-more { font-size: 0.75rem; color: var(--text-dim); font-style: italic; }
+
+/* ── Archive ─────────────────────────────────────────────────────────────── */
+.archive-modal {
+  max-width: 580px; width: 90vw;
+  max-height: 82vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.75rem;
+}
+
+.archive-hint {
+  font-size: 0.78rem; color: var(--text-dim);
+  background: var(--surface2); border-radius: 6px;
+  padding: 0.4rem 0.75rem; margin: -0.25rem 0;
+}
+
+.archive-controls {
+  display: flex; gap: 0.5rem; align-items: center;
+}
+
+.archive-empty {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.5rem; padding: 2rem 1rem; color: var(--text-dim);
+  font-size: 0.85rem; text-align: center;
+}
+.archive-empty span { font-size: 2rem; opacity: 0.5; }
+
+.archive-list {
+  display: flex; flex-direction: column; gap: 0.4rem;
+  max-height: 420px; overflow-y: auto; padding-right: 2px;
+}
+
+.archive-item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.75rem; padding: 0.65rem 0.9rem;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; transition: border-color 0.15s;
+}
+.archive-item:hover { border-color: var(--border2); }
+
+.archive-item-left {
+  display: flex; align-items: flex-start; gap: 0.6rem; flex: 1; min-width: 0;
+}
+
+.archive-priority-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0; margin-top: 5px;
+}
+
+.archive-item-info {
+  display: flex; flex-direction: column; gap: 0.2rem; min-width: 0;
+}
+
+.archive-item-text {
+  font-size: 0.88rem; font-weight: 500; color: var(--text-muted);
+  text-decoration: line-through; word-break: break-word;
+}
+
+.archive-item-meta {
+  display: flex; flex-wrap: wrap; gap: 0.3rem;
+  font-size: 0.7rem; color: var(--text-dim); font-weight: 500;
+}
+
+.archive-expires { font-weight: 600; color: var(--text-dim); }
+.archive-expires.urgent { color: var(--amber); }
+
+.archive-item-actions {
+  display: flex; gap: 0.3rem; align-items: center; flex-shrink: 0;
+}
+
+/* Archive button on task cards */
+.archive-btn {
+  background: none; border: 1px solid transparent;
+  font-size: 0.82rem; cursor: pointer; padding: 0.22rem 0.4rem;
+  border-radius: 5px; line-height: 1; transition: all 0.15s; opacity: 0;
+}
+.todo-item:hover .archive-btn { opacity: 1; }
+.archive-btn:hover { border-color: var(--border); background: var(--surface2); }
+
+/* Archive count badge in sidebar */
+.archive-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface2); color: var(--text-muted);
+  font-size: 0.68rem; font-weight: 700; padding: 0.05rem 0.4rem;
+  border-radius: 99px; margin-left: 0.3rem;
+}

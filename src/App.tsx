@@ -28,6 +28,11 @@ interface Todo {
   createdAt: number; totalTimeMs: number; timeGoalMs: number;
 }
 
+interface ArchivedTodo extends Todo {
+  archivedAt: number;  // timestamp when archived
+  completedAt: number; // timestamp when completed
+}
+
 interface Toast { id: string; message: string; undoFn?: () => void; }
 
 interface SubtaskReward {
@@ -408,7 +413,7 @@ function SortableItem({
   onTimerStop, onTimerReset, onTimerChangeMode, onTimerChangeCountdown,
   subtaskTimers, onSubtaskTimerStart, onSubtaskTimerStop,
   onSubtaskTimerReset, onSubtaskTimerChangeMode, onSubtaskTimerChangeCountdown,
-  onSaveTimeGoal,
+  onSaveTimeGoal, onArchive,
 }: {
   todo: Todo; onToggle: (id: string) => void; onDelete: (id: string) => void;
   onSave: (id: string, updates: Partial<Todo>) => void;
@@ -428,6 +433,7 @@ function SortableItem({
   onSubtaskTimerChangeMode: (subtaskId: string, mode: TimerMode) => void;
   onSubtaskTimerChangeCountdown: (subtaskId: string, mins: number) => void;
   onSaveTimeGoal: (todoId: string, goalMs: number) => void;
+  onArchive: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -571,6 +577,9 @@ function SortableItem({
             <button className="expand-btn" onClick={() => setExpanded(e => !e)}>{expanded ? "▲" : "▼"}</button>
             <button className="edit-btn" onClick={handleEdit}>✎</button>
             <button className="delete-btn" onClick={() => onDelete(todo.id)}>✕</button>
+            {todo.completed && (
+              <button className="archive-btn" onClick={() => onArchive(todo.id)} title="Archive task">📦</button>
+            )}
           </div>
         )}
       </div>
@@ -1052,6 +1061,88 @@ function XPBar({ taskXP, subtaskXP, subtaskStreak, unlockedCount, totalCount, on
   );
 }
 
+// ─── ArchivePanel ────────────────────────────────────────────────────────────
+function ArchivePanel({ archive, onRestore, onDelete, onClose }: {
+  archive: ArchivedTodo[];
+  onRestore: (id: string) => void;
+  onDelete: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"archivedAt" | "priority">("archivedAt");
+
+  const filtered = archive
+    .filter(a => !search || a.text.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => sortBy === "archivedAt"
+      ? b.archivedAt - a.archivedAt
+      : PRIORITY_CONFIG[b.priority].weight - PRIORITY_CONFIG[a.priority].weight
+    );
+
+  const expiresIn = (archivedAt: number) => {
+    const NINETY_DAYS = 90 * 24 * 60 * 60 * 1000;
+    const daysLeft = Math.ceil((archivedAt + NINETY_DAYS - Date.now()) / 86400000);
+    if (daysLeft <= 7) return { label: `Expires in ${daysLeft}d`, urgent: true };
+    return { label: `Expires in ${daysLeft}d`, urgent: false };
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal archive-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>📦 Archive</h2>
+          <span className="achievements-count">{archive.length} task{archive.length !== 1 ? "s" : ""}</span>
+        </div>
+        <p className="archive-hint">Tasks are kept for 90 days then permanently deleted.</p>
+
+        <div className="archive-controls">
+          <input className="search-input" style={{flex:1}} placeholder="Search archive…"
+            value={search} onChange={e => setSearch(e.target.value)} />
+          <select className="sort-select" value={sortBy} onChange={e => setSortBy(e.target.value as "archivedAt" | "priority")}>
+            <option value="archivedAt">Most Recent</option>
+            <option value="priority">Priority</option>
+          </select>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="archive-empty">
+            <span>📭</span>
+            <p>{search ? "No archived tasks match your search." : "Archive is empty — completed tasks auto-archive after 7 days."}</p>
+          </div>
+        ) : (
+          <div className="archive-list">
+            {filtered.map(a => {
+              const exp = expiresIn(a.archivedAt);
+              return (
+                <div key={a.id} className="archive-item">
+                  <div className="archive-item-left">
+                    <span className="archive-priority-dot" style={{background: PRIORITY_CONFIG[a.priority].dot}} />
+                    <div className="archive-item-info">
+                      <span className="archive-item-text">{a.text}</span>
+                      <div className="archive-item-meta">
+                        <span>Archived {new Date(a.archivedAt).toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"})}</span>
+                        {a.tags.length > 0 && <span>· {a.tags.join(", ")}</span>}
+                        {a.totalTimeMs > 0 && <span>· {fmtDuration(a.totalTimeMs)} logged</span>}
+                        <span className={`archive-expires ${exp.urgent ? "urgent" : ""}`}>· {exp.label}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="archive-item-actions">
+                    <button className="save-btn" style={{padding:"0.2rem 0.6rem", fontSize:"0.75rem"}}
+                      onClick={() => onRestore(a.id)}>↩ Restore</button>
+                    <button className="delete-btn" style={{opacity:1, padding:"0.2rem 0.5rem"}}
+                      onClick={() => onDelete(a.id)}>✕</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <button className="cancel-btn" style={{marginTop:"0.5rem"}} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [todos, setTodos] = useState<Todo[]>(() => {
@@ -1085,6 +1176,10 @@ export default function App() {
   });
   const [timers, setTimers] = useState<Record<string, ActiveTimer>>({});
   const [subtaskTimers, setSubtaskTimers] = useState<Record<string, ActiveTimer>>({});
+  const [archive, setArchive] = useState<ArchivedTodo[]>(() => {
+    try { return JSON.parse(localStorage.getItem("taskflow-archive") || "[]"); } catch { return []; }
+  });
+  const [showArchive, setShowArchive] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(() =>
     (localStorage.getItem("taskflow-theme") as ThemeMode) || "dark"
   );
@@ -1116,6 +1211,7 @@ export default function App() {
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => { localStorage.setItem("taskflow-todos", JSON.stringify(todos)); }, [todos]);
+  useEffect(() => { localStorage.setItem("taskflow-archive", JSON.stringify(archive)); }, [archive]);
   useEffect(() => { localStorage.setItem("taskflow-task-xp", String(taskXP)); }, [taskXP]);
   useEffect(() => { localStorage.setItem("taskflow-subtask-xp", String(subtaskXP)); }, [subtaskXP]);
   useEffect(() => { localStorage.setItem("taskflow-subtask-streak", JSON.stringify(subtaskStreak)); }, [subtaskStreak]);
@@ -1132,6 +1228,28 @@ export default function App() {
   useEffect(() => {
     setTodos(prev => prev.map(t => shouldRecurReset(t) ? { ...t, completed: false, lastReset: today() } : t));
     const iv = setInterval(() => setTodos(prev => prev.map(t => shouldRecurReset(t) ? { ...t, completed: false, lastReset: today() } : t)), 60000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Auto-archive completed tasks after 7 days
+  useEffect(() => {
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+    const autoArchive = () => {
+      const now = Date.now();
+      setTodos(prev => {
+        const toArchive = prev.filter(t => t.completed && (now - t.createdAt) > SEVEN_DAYS);
+        if (toArchive.length === 0) return prev;
+        setArchive(arch => {
+          const NINETY_DAYS = 90 * 24 * 60 * 60 * 1000;
+          const pruned = arch.filter(a => now - a.archivedAt < NINETY_DAYS);
+          const newEntries: ArchivedTodo[] = toArchive.map(t => ({ ...t, archivedAt: now, completedAt: t.createdAt }));
+          return [...pruned, ...newEntries];
+        });
+        return prev.filter(t => !(t.completed && (now - t.createdAt) > SEVEN_DAYS));
+      });
+    };
+    autoArchive();
+    const iv = setInterval(autoArchive, 60 * 60 * 1000); // check every hour
     return () => clearInterval(iv);
   }, []);
 
@@ -1282,6 +1400,37 @@ export default function App() {
     setTodos(prev => prev.filter(t => t.id !== id));
     setTimers(prev => { const n = { ...prev }; delete n[id]; return n; });
     showToast(`Deleted "${deleted.text}"`, () => setTodos(prev => [deleted, ...prev]));
+  };
+
+  const archiveTodo = (id: string) => {
+    const todo = todos.find(t => t.id === id);
+    if (!todo) return;
+    const now = Date.now();
+    setArchive(prev => {
+      const NINETY_DAYS = 90 * 24 * 60 * 60 * 1000;
+      const pruned = prev.filter(a => now - a.archivedAt < NINETY_DAYS);
+      return [...pruned, { ...todo, archivedAt: now, completedAt: now }];
+    });
+    setTodos(prev => prev.filter(t => t.id !== id));
+    showToast(`Archived "${todo.text}"`, () => {
+      setArchive(prev => prev.filter(a => a.id !== id));
+      setTodos(prev => [todo, ...prev]);
+    });
+  };
+
+  const restoreFromArchive = (id: string) => {
+    const item = archive.find(a => a.id === id);
+    if (!item) return;
+    const { archivedAt, completedAt, ...todo } = item;
+    setTodos(prev => [{ ...todo, completed: false }, ...prev]);
+    setArchive(prev => prev.filter(a => a.id !== id));
+    showToast(`Restored "${todo.text}"`);
+  };
+
+  const deleteFromArchive = (id: string) => {
+    const item = archive.find(a => a.id === id);
+    setArchive(prev => prev.filter(a => a.id !== id));
+    showToast(`Permanently deleted "${item?.text}"`);
   };
 
   const saveTodo = (id: string, updates: Partial<Todo>) => {
@@ -1557,6 +1706,9 @@ export default function App() {
           <button className="sidebar-action-btn" onClick={() => setShowFocusMode(true)}>🎯 Focus Mode</button>
           <button className="sidebar-action-btn" onClick={() => setShowTemplates(true)}>📋 Templates</button>
           <button className="sidebar-action-btn" onClick={() => setShowWeeklyReview(true)}>📆 Weekly Review</button>
+          <button className="sidebar-action-btn" onClick={() => setShowArchive(true)}>
+            📦 Archive {archive.length > 0 && <span className="archive-count">{archive.length}</span>}
+          </button>
           <button className="sidebar-action-btn" onClick={() => setShowStats(s => !s)}>📊 Stats</button>
           <button className="sidebar-action-btn" onClick={exportCSV}>⬇ Export CSV</button>
           <button className="sidebar-action-btn" onClick={copyToClipboard}>⎘ Copy List</button>
@@ -1661,7 +1813,8 @@ export default function App() {
                   onSubtaskTimerReset={subtaskTimerReset}
                   onSubtaskTimerChangeMode={subtaskTimerChangeMode}
                   onSubtaskTimerChangeCountdown={subtaskTimerChangeCountdown}
-                  onSaveTimeGoal={saveTimeGoal} />
+                  onSaveTimeGoal={saveTimeGoal}
+                  onArchive={archiveTodo} />
               ))}
             </div>
           </SortableContext>
@@ -1711,6 +1864,15 @@ export default function App() {
       {showWeeklyReview && (
         <WeeklyReview todos={todos} taskXP={taskXP} subtaskXP={subtaskXP}
           achievements={achievements} onClose={() => setShowWeeklyReview(false)} />
+      )}
+
+      {/* Archive */}
+      {showArchive && (
+        <ArchivePanel
+          archive={archive}
+          onRestore={restoreFromArchive}
+          onDelete={deleteFromArchive}
+          onClose={() => setShowArchive(false)} />
       )}
 
       {/* Shortcuts */}

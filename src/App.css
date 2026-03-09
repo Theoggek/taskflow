@@ -756,3 +756,163 @@ kbd {
 .streak-fire { font-size: 1.1rem; line-height: 1; }
 .streak-count { font-size: 1rem; font-weight: 800; color: var(--text); }
 .streak-label { font-size: 0.75rem; font-weight: 500; color: var(--text-muted); }
+
+/* ── Light Theme ─────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg: #f0f4f8; --surface: #ffffff; --surface2: #e8edf4;
+  --border: #d0d8e8; --border2: #b8c4d8;
+  --text: #1a202c; --text-muted: #4a5568; --text-dim: #718096;
+  --accent: #3b7dd8; --accent-dim: #bee3f8;
+  --green: #22a666; --amber: #d97706; --red: #e53e3e;
+}
+
+/* ── Theme Toggle ────────────────────────────────────────────────────────── */
+.brand { display: flex; align-items: center; gap: 0.5rem; }
+.theme-toggle {
+  margin-left: auto; background: none; border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; font-size: 1rem;
+  padding: 0.2rem 0.4rem; line-height: 1; transition: all 0.15s;
+}
+.theme-toggle:hover { border-color: var(--accent); }
+
+/* ── Achievements Peek Button ────────────────────────────────────────────── */
+.achievements-peek {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 0.78rem; font-weight: 600;
+  font-family: 'Inter', sans-serif; padding: 0.1rem 0; transition: color 0.15s;
+}
+.achievements-peek:hover { color: var(--accent); }
+.achievements-peek-count {
+  background: var(--accent-dim); color: var(--accent);
+  font-size: 0.7rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 99px;
+}
+
+/* ── Badge Unlock Overlay ────────────────────────────────────────────────── */
+.badge-unlock-overlay {
+  position: fixed; inset: 0; z-index: 99999;
+  background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.3s ease;
+}
+.badge-unlock-confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.badge-unlock-card {
+  position: relative; z-index: 1;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 2.5rem 2rem;
+  text-align: center; max-width: 340px; width: 90%;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+  animation: badgePop 0.5s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes badgePop {
+  0% { transform: scale(0.5) translateY(40px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.badge-unlock-label { font-size: 0.8rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem; }
+.badge-unlock-icon { font-size: 4rem; line-height: 1; margin-bottom: 0.5rem; animation: iconBounce 0.6s 0.3s cubic-bezier(0.34,1.56,0.64,1) both; }
+@keyframes iconBounce { 0%{transform:scale(0)} 100%{transform:scale(1)} }
+.badge-unlock-title { font-size: 1.5rem; font-weight: 800; color: var(--text); margin-bottom: 0.35rem; }
+.badge-unlock-desc  { font-size: 0.9rem; color: var(--text-muted); }
+
+/* ── Achievements Modal ───────────────────────────────────────────────────── */
+.achievements-modal { max-width: 560px; max-height: 80vh; overflow-y: auto; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.modal-header h2 { margin: 0; }
+.achievements-count { font-size: 0.8rem; font-weight: 700; color: var(--accent); background: var(--accent-dim); padding: 0.2rem 0.6rem; border-radius: 99px; }
+.achievements-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.6rem; }
+.achievement-card {
+  display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
+  padding: 0.75rem 0.5rem; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface2); text-align: center; transition: all 0.2s;
+}
+.achievement-card.unlocked { border-color: rgba(79,142,247,0.4); background: var(--accent-dim); }
+.achievement-card.locked { opacity: 0.45; }
+.achievement-icon { font-size: 1.6rem; line-height: 1; }
+.achievement-title { font-size: 0.75rem; font-weight: 700; color: var(--text); }
+.achievement-desc  { font-size: 0.65rem; color: var(--text-muted); line-height: 1.3; }
+.achievement-date  { font-size: 0.6rem; color: var(--accent); font-weight: 600; }
+
+/* ── Focus Mode ──────────────────────────────────────────────────────────── */
+.focus-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg); display: flex; flex-direction: column;
+  animation: fadeIn 0.25s ease;
+}
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.focus-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.5rem; border-bottom: 1px solid var(--border);
+}
+.focus-brand { font-size: 1rem; font-weight: 800; color: var(--accent); }
+.focus-close {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  font-size: 0.85rem; font-weight: 600; padding: 0.35rem 0.8rem;
+  border-radius: 7px; cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: all 0.15s;
+}
+.focus-close:hover { border-color: var(--red); color: var(--red); }
+.focus-body {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 2rem; max-width: 640px; margin: 0 auto; width: 100%;
+}
+.focus-label { font-size: 0.75rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem; }
+.focus-task-title { font-size: 2rem; font-weight: 800; color: var(--text); text-align: center; line-height: 1.2; margin-bottom: 0.75rem; }
+.focus-notes { font-size: 0.9rem; color: var(--text-muted); text-align: center; margin-bottom: 1.25rem; }
+.focus-progress { width: 100%; margin-bottom: 1.25rem; }
+.focus-progress-bar { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+.focus-progress-fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.5s ease; }
+.focus-progress-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; margin-top: 0.35rem; display: block; text-align: center; }
+.focus-subtasks { width: 100%; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; }
+.focus-subtask { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.9rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; color: var(--text); }
+.focus-subtask.done { opacity: 0.45; text-decoration: line-through; }
+.focus-complete-btn {
+  background: var(--accent); color: white; border: none; border-radius: 10px;
+  font-size: 1rem; font-weight: 700; padding: 0.8rem 2rem; cursor: pointer;
+  font-family: 'Inter', sans-serif; transition: all 0.2s;
+}
+.focus-complete-btn:hover { background: #3b7dd8; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(79,142,247,0.3); }
+.focus-empty { display: flex; flex-direction: column; align-items: center; gap: 1rem; color: var(--text-muted); font-size: 1.1rem; }
+.focus-empty span { font-size: 3rem; }
+.focus-queue { padding: 1rem 1.5rem; border-top: 1px solid var(--border); }
+.focus-queue-label { font-size: 0.72rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 0.5rem; }
+.focus-queue-item {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%;
+  background: none; border: 1px solid transparent; color: var(--text-muted);
+  font-size: 0.85rem; font-family: 'Inter', sans-serif; padding: 0.4rem 0.6rem;
+  border-radius: 6px; cursor: pointer; text-align: left; transition: all 0.15s;
+}
+.focus-queue-item:hover { background: var(--surface2); border-color: var(--border); color: var(--text); }
+.focus-queue-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Templates Modal ─────────────────────────────────────────────────────── */
+.templates-modal { max-width: 520px; max-height: 80vh; overflow-y: auto; }
+.template-create-form { display: flex; flex-direction: column; gap: 0.5rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem; margin-bottom: 0.75rem; }
+.template-create-row { display: flex; gap: 0.5rem; }
+.templates-grid { display: flex; flex-direction: column; gap: 0.5rem; }
+.template-card { display: flex; align-items: center; gap: 0.75rem; padding: 0.7rem 0.9rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; transition: border-color 0.15s; }
+.template-card:hover { border-color: var(--accent); }
+.template-icon { font-size: 1.4rem; line-height: 1; }
+.template-info { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; }
+.template-name { font-size: 0.88rem; font-weight: 700; color: var(--text); }
+.template-meta { font-size: 0.72rem; color: var(--text-muted); }
+.template-actions { display: flex; align-items: center; gap: 0.35rem; }
+
+/* ── Weekly Review ───────────────────────────────────────────────────────── */
+.weekly-modal { max-width: 520px; max-height: 85vh; overflow-y: auto; }
+.weekly-subtitle { font-size: 0.8rem; color: var(--text-muted); margin-top: -0.5rem; margin-bottom: 1rem; }
+.weekly-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 1.25rem; }
+.weekly-stat { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 0.65rem; text-align: center; display: flex; flex-direction: column; gap: 0.2rem; }
+.weekly-stat-val { font-size: 1.3rem; font-weight: 800; color: var(--text); }
+.weekly-stat-lbl { font-size: 0.65rem; color: var(--text-muted); font-weight: 600; }
+.weekly-section-title { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin: 0.75rem 0 0.4rem; }
+.weekly-chart { display: flex; gap: 0.4rem; align-items: flex-end; height: 80px; margin-bottom: 0.25rem; }
+.weekly-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.2rem; height: 100%; }
+.weekly-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.weekly-bar { width: 100%; min-height: 3px; background: var(--accent); border-radius: 4px 4px 0 0; transition: height 0.5s ease; }
+.weekly-bar-label { font-size: 0.62rem; color: var(--text-dim); font-weight: 600; }
+.weekly-bar-count { font-size: 0.6rem; color: var(--accent); font-weight: 700; }
+.weekly-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.weekly-badge { display: flex; align-items: center; gap: 0.3rem; background: var(--accent-dim); border: 1px solid rgba(79,142,247,0.3); padding: 0.25rem 0.6rem; border-radius: 99px; font-size: 0.78rem; font-weight: 600; color: var(--text); }
+.weekly-tasks { display: flex; flex-direction: column; gap: 0.35rem; }
+.weekly-task-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-muted); }
+.weekly-task-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.weekly-more { font-size: 0.75rem; color: var(--text-dim); font-style: italic; }

@@ -38,6 +38,18 @@ interface SubtaskReward {
   y: number; // percent from top
 }
 
+type ThemeMode = "dark" | "light";
+
+interface Achievement {
+  id: string; title: string; description: string; icon: string;
+  unlockedAt: number | null;
+}
+
+interface TaskTemplate {
+  id: string; name: string; icon: string; priority: Priority;
+  tags: string[]; notes: string; subtaskTexts: string[];
+}
+
 interface ActiveTimer {
   todoId: string; mode: TimerMode;
   running: boolean; elapsed: number; // ms
@@ -64,6 +76,38 @@ const ENCOURAGEMENTS = [
 ];
 const POMODORO_BREAK = 5 * 60 * 1000;
 const today = () => new Date().toISOString().slice(0, 10);
+
+const ACHIEVEMENT_DEFS: Omit<Achievement, "unlockedAt">[] = [
+  // Task milestones
+  { id: "task_1",   icon: "🌱", title: "First Step",      description: "Complete your first task" },
+  { id: "task_10",  icon: "🔥", title: "On Fire",         description: "Complete 10 tasks" },
+  { id: "task_50",  icon: "⚡", title: "Powerhouse",      description: "Complete 50 tasks" },
+  { id: "task_100", icon: "👑", title: "Centurion",       description: "Complete 100 tasks" },
+  // Streak milestones
+  { id: "streak_3",  icon: "📅", title: "3-Day Streak",   description: "Complete subtasks 3 days in a row" },
+  { id: "streak_7",  icon: "🗓", title: "Week Warrior",   description: "Complete subtasks 7 days in a row" },
+  { id: "streak_14", icon: "💎", title: "Fortnight",      description: "Complete subtasks 14 days in a row" },
+  { id: "streak_30", icon: "🏆", title: "Iron Will",      description: "Complete subtasks 30 days in a row" },
+  // Timer milestones
+  { id: "pomo_1",    icon: "🍅", title: "First Pomodoro", description: "Complete your first Pomodoro" },
+  { id: "time_1hr",  icon: "⏱",  title: "Hour Down",      description: "Log 1 hour of focused time" },
+  { id: "time_10hr", icon: "🕰", title: "Time Lord",      description: "Log 10 hours of focused time" },
+  // Brain Dump milestones
+  { id: "dump_1",  icon: "🧠", title: "Mind Clear",       description: "Complete your first Brain Dump" },
+  { id: "dump_10", icon: "🌊", title: "Thought Flow",     description: "Complete 10 Brain Dumps" },
+  // Level milestones
+  { id: "lvl_5",  icon: "⭐", title: "Rising Star",       description: "Reach Task Level 5" },
+  { id: "lvl_10", icon: "🌟", title: "Veteran",           description: "Reach Task Level 10" },
+  { id: "lvl_20", icon: "💫", title: "Legend",            description: "Reach Task Level 20" },
+  // Speed milestones
+  { id: "speed_5", icon: "🚀", title: "Speed Runner",     description: "Complete 5 tasks in one day" },
+];
+
+const DEFAULT_TEMPLATES: TaskTemplate[] = [
+  { id: "tpl_work",    name: "Work Project",   icon: "💼", priority: "high",   tags: ["work"],     notes: "Project notes here", subtaskTexts: ["Define scope","Research","Draft","Review","Submit"] },
+  { id: "tpl_personal",name: "Personal Goal",  icon: "🎯", priority: "medium", tags: ["personal"], notes: "",                   subtaskTexts: ["Plan","Take action","Review progress"] },
+  { id: "tpl_meeting", name: "Meeting Prep",   icon: "📋", priority: "medium", tags: ["work"],     notes: "Agenda:",            subtaskTexts: ["Prepare agenda","Send invites","Take notes","Follow up"] },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function tagColor(tag: string) {
@@ -685,9 +729,284 @@ function BrainDump({ onClose, onCapture }: { onClose: () => void; onCapture: (it
   );
 }
 
+// ─── BadgeUnlock ─────────────────────────────────────────────────────────────
+function BadgeUnlock({ achievement, onDone }: { achievement: Achievement; onDone: () => void }) {
+  useEffect(() => { const t = setTimeout(onDone, 4000); return () => clearTimeout(t); }, [onDone]);
+  const pieces = Array.from({ length: 40 }, (_, i) => ({
+    id: i, color: ["#4f8ef7","#f87171","#34d399","#f59e0b","#a78bfa","#f472b6","#fff"][i%7],
+    x: Math.random()*100, delay: Math.random()*0.5, size: 5+Math.random()*9,
+  }));
+  return (
+    <div className="badge-unlock-overlay" onClick={onDone}>
+      <div className="badge-unlock-confetti" aria-hidden>
+        {pieces.map(p => (
+          <div key={p.id} className="confetti-piece"
+            style={{ left:`${p.x}%`, background:p.color, width:p.size, height:p.size, animationDelay:`${p.delay}s` }} />
+        ))}
+      </div>
+      <div className="badge-unlock-card" onClick={e => e.stopPropagation()}>
+        <p className="badge-unlock-label">🎖 Achievement Unlocked!</p>
+        <div className="badge-unlock-icon">{achievement.icon}</div>
+        <p className="badge-unlock-title">{achievement.title}</p>
+        <p className="badge-unlock-desc">{achievement.description}</p>
+        <button className="save-btn" style={{marginTop:"1rem"}} onClick={onDone}>Awesome! 🙌</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── AchievementsPanel ────────────────────────────────────────────────────────
+function AchievementsPanel({ achievements, onClose }: { achievements: Achievement[]; onClose: () => void }) {
+  const unlocked = achievements.filter(a => a.unlockedAt);
+  const locked   = achievements.filter(a => !a.unlockedAt);
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal achievements-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>🏅 Achievements</h2>
+          <span className="achievements-count">{unlocked.length}/{achievements.length} unlocked</span>
+        </div>
+        <div className="achievements-grid">
+          {unlocked.map(a => (
+            <div key={a.id} className="achievement-card unlocked">
+              <span className="achievement-icon">{a.icon}</span>
+              <span className="achievement-title">{a.title}</span>
+              <span className="achievement-desc">{a.description}</span>
+              <span className="achievement-date">{new Date(a.unlockedAt!).toLocaleDateString()}</span>
+            </div>
+          ))}
+          {locked.map(a => (
+            <div key={a.id} className="achievement-card locked">
+              <span className="achievement-icon">🔒</span>
+              <span className="achievement-title">{a.title}</span>
+              <span className="achievement-desc">{a.description}</span>
+            </div>
+          ))}
+        </div>
+        <button className="save-btn" style={{marginTop:"1rem"}} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── FocusMode ────────────────────────────────────────────────────────────────
+function FocusMode({ todos, focusId, onSetFocus, onToggle, onClose }: {
+  todos: Todo[]; focusId: string | null;
+  onSetFocus: (id: string) => void; onToggle: (id: string) => void; onClose: () => void;
+}) {
+  const activeTodos = todos.filter(t => !t.completed);
+  const task = todos.find(t => t.id === focusId) ?? activeTodos[0] ?? null;
+  const subDone = task?.subtasks.filter(s => s.completed).length ?? 0;
+  const subTotal = task?.subtasks.length ?? 0;
+  const pct = subTotal > 0 ? Math.round((subDone / subTotal) * 100) : 0;
+
+  return (
+    <div className="focus-overlay">
+      <div className="focus-header">
+        <span className="focus-brand">▣ Focus Mode</span>
+        <button className="focus-close" onClick={onClose}>✕ Exit</button>
+      </div>
+      <div className="focus-body">
+        {task ? (
+          <>
+            <p className="focus-label">Current Task</p>
+            <h1 className="focus-task-title">{task.text}</h1>
+            {task.notes && <p className="focus-notes">{task.notes}</p>}
+            {subTotal > 0 && (
+              <div className="focus-progress">
+                <div className="focus-progress-bar"><div className="focus-progress-fill" style={{width:`${pct}%`}} /></div>
+                <span className="focus-progress-label">{subDone}/{subTotal} subtasks · {pct}%</span>
+              </div>
+            )}
+            {task.subtasks.length > 0 && (
+              <div className="focus-subtasks">
+                {task.subtasks.map(s => (
+                  <div key={s.id} className={`focus-subtask ${s.completed ? "done" : ""}`}>
+                    <button className={`check-btn small ${s.completed ? "checked" : ""}`} onClick={() => {}} />
+                    <span>{s.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="focus-complete-btn" onClick={() => { onToggle(task.id); onClose(); }}>
+              ✓ Complete Task
+            </button>
+          </>
+        ) : (
+          <div className="focus-empty">
+            <span>🎉</span>
+            <p>All tasks complete! Amazing work.</p>
+          </div>
+        )}
+      </div>
+      {activeTodos.length > 1 && (
+        <div className="focus-queue">
+          <p className="focus-queue-label">Up Next</p>
+          {activeTodos.filter(t => t.id !== task?.id).slice(0, 4).map(t => (
+            <button key={t.id} className="focus-queue-item" onClick={() => onSetFocus(t.id)}>
+              <span className="focus-queue-dot" style={{background: PRIORITY_CONFIG[t.priority].dot}} />
+              {t.text}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TemplatesModal ───────────────────────────────────────────────────────────
+function TemplatesModal({ templates, onApply, onDelete, onClose, onAdd }: {
+  templates: TaskTemplate[]; onApply: (t: TaskTemplate) => void;
+  onDelete: (id: string) => void; onClose: () => void;
+  onAdd: (t: TaskTemplate) => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState(""); const [icon, setIcon] = useState("📌");
+  const [priority, setPriority] = useState<Priority>("medium");
+  const [tags, setTags] = useState(""); const [notes, setNotes] = useState("");
+  const [subtasks, setSubtasks] = useState("");
+  const save = () => {
+    if (!name.trim()) return;
+    onAdd({ id: crypto.randomUUID(), name: name.trim(), icon, priority,
+      tags: tags.split(",").map(t=>t.trim()).filter(Boolean),
+      notes, subtaskTexts: subtasks.split("\n").map(t=>t.trim()).filter(Boolean) });
+    setCreating(false); setName(""); setIcon("📌"); setTags(""); setNotes(""); setSubtasks("");
+  };
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal templates-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>📋 Templates</h2>
+          <button className="save-btn" style={{padding:"0.3rem 0.7rem",fontSize:"0.8rem"}} onClick={() => setCreating(c=>!c)}>
+            {creating ? "Cancel" : "+ New Template"}
+          </button>
+        </div>
+        {creating && (
+          <div className="template-create-form">
+            <div className="template-create-row">
+              <input className="edit-input" style={{width:"3rem",textAlign:"center"}} value={icon} onChange={e=>setIcon(e.target.value)} placeholder="📌" maxLength={2} />
+              <input className="edit-input" style={{flex:1}} value={name} onChange={e=>setName(e.target.value)} placeholder="Template name…" />
+            </div>
+            <div className="priority-select">
+              {(["low","medium","high"] as Priority[]).map(p => (
+                <button key={p} className={`pri-btn small ${priority===p?"active":""}`}
+                  onClick={()=>setPriority(p)} style={{"--dot":PRIORITY_CONFIG[p].dot} as React.CSSProperties}>
+                  {PRIORITY_CONFIG[p].label}
+                </button>
+              ))}
+            </div>
+            <input className="edit-input" value={tags} onChange={e=>setTags(e.target.value)} placeholder="Tags (comma-separated)…" />
+            <textarea className="brain-dump-textarea" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Notes…" rows={2} />
+            <textarea className="brain-dump-textarea" value={subtasks} onChange={e=>setSubtasks(e.target.value)} placeholder="Subtasks (one per line): Step one / Step two" rows={4} />
+            <button className="save-btn" onClick={save}>Save Template</button>
+          </div>
+        )}
+        <div className="templates-grid">
+          {templates.map(t => (
+            <div key={t.id} className="template-card">
+              <span className="template-icon">{t.icon}</span>
+              <div className="template-info">
+                <span className="template-name">{t.name}</span>
+                <span className="template-meta">
+                  {t.priority} · {t.subtaskTexts.length} subtasks
+                  {t.tags.length > 0 && ` · ${t.tags.join(", ")}`}
+                </span>
+              </div>
+              <div className="template-actions">
+                <button className="save-btn" style={{padding:"0.25rem 0.6rem",fontSize:"0.75rem"}} onClick={()=>onApply(t)}>Use</button>
+                {!["tpl_work","tpl_personal","tpl_meeting"].includes(t.id) && (
+                  <button className="delete-btn" style={{opacity:1}} onClick={()=>onDelete(t.id)}>✕</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <button className="cancel-btn" style={{marginTop:"0.5rem"}} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── WeeklyReview ─────────────────────────────────────────────────────────────
+function WeeklyReview({ todos, taskXP, subtaskXP, achievements, onClose }: {
+  todos: Todo[]; taskXP: number; subtaskXP: number; achievements: Achievement[]; onClose: () => void;
+}) {
+  const weekAgo = Date.now() - 7*86400000;
+  const completed = todos.filter(t => t.completed);
+  const completedThisWeek = completed.filter(t => t.createdAt > weekAgo);
+  const totalTimeMs = todos.reduce((a,t) => a+(t.totalTimeMs||0),0) + todos.flatMap(t=>t.subtasks).reduce((a,s)=>a+(s.totalTimeMs||0),0);
+  const totalMins = Math.floor(totalTimeMs/60000);
+  const unlockedThisWeek = achievements.filter(a => a.unlockedAt && a.unlockedAt > weekAgo);
+  const highPriDone = completedThisWeek.filter(t => t.priority==="high").length;
+  const dayMap: Record<string,number> = {};
+  completedThisWeek.forEach(t => { const d=new Date(t.createdAt).toLocaleDateString("en-US",{weekday:"short"}); dayMap[d]=(dayMap[d]||0)+1; });
+  const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const maxDay = Math.max(...Object.values(dayMap), 1);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal weekly-modal" onClick={e=>e.stopPropagation()}>
+        <h2>📆 Weekly Review</h2>
+        <p className="weekly-subtitle">{new Date(weekAgo).toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"})}</p>
+
+        <div className="weekly-stats-grid">
+          <div className="weekly-stat"><span className="weekly-stat-val">{completedThisWeek.length}</span><span className="weekly-stat-lbl">Tasks Done</span></div>
+          <div className="weekly-stat"><span className="weekly-stat-val">{highPriDone}</span><span className="weekly-stat-lbl">High Priority</span></div>
+          <div className="weekly-stat"><span className="weekly-stat-val">{totalMins<60?`${totalMins}m`:`${Math.floor(totalMins/60)}h${totalMins%60}m`}</span><span className="weekly-stat-lbl">Time Logged</span></div>
+          <div className="weekly-stat"><span className="weekly-stat-val">{taskXP+subtaskXP}</span><span className="weekly-stat-lbl">Total XP</span></div>
+        </div>
+
+        <p className="weekly-section-title">Activity This Week</p>
+        <div className="weekly-chart">
+          {days.map(d => (
+            <div key={d} className="weekly-bar-col">
+              <div className="weekly-bar-wrap">
+                <div className="weekly-bar" style={{height:`${((dayMap[d]||0)/maxDay)*100}%`}} />
+              </div>
+              <span className="weekly-bar-label">{d}</span>
+              {dayMap[d] > 0 && <span className="weekly-bar-count">{dayMap[d]}</span>}
+            </div>
+          ))}
+        </div>
+
+        {unlockedThisWeek.length > 0 && (
+          <>
+            <p className="weekly-section-title">Badges Earned This Week</p>
+            <div className="weekly-badges">
+              {unlockedThisWeek.map(a => (
+                <div key={a.id} className="weekly-badge">
+                  <span>{a.icon}</span><span>{a.title}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {completedThisWeek.length > 0 && (
+          <>
+            <p className="weekly-section-title">Completed Tasks</p>
+            <div className="weekly-tasks">
+              {completedThisWeek.slice(0,10).map(t => (
+                <div key={t.id} className="weekly-task-item">
+                  <span className="weekly-task-dot" style={{background:PRIORITY_CONFIG[t.priority].dot}} />
+                  <span>{t.text}</span>
+                </div>
+              ))}
+              {completedThisWeek.length > 10 && <p className="weekly-more">+{completedThisWeek.length-10} more</p>}
+            </div>
+          </>
+        )}
+
+        <button className="save-btn" style={{marginTop:"1rem",width:"100%"}} onClick={onClose}>Done</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── XPBar ───────────────────────────────────────────────────────────────────
-function XPBar({ taskXP, subtaskXP, subtaskStreak }: {
+function XPBar({ taskXP, subtaskXP, subtaskStreak, unlockedCount, totalCount, onShowAchievements }: {
   taskXP: number; subtaskXP: number; subtaskStreak: { count: number; date: string };
+  unlockedCount: number; totalCount: number; onShowAchievements: () => void;
 }) {
   const taskLevel = Math.floor(taskXP / 100) + 1;
   const taskLevelXP = taskXP % 100;
@@ -724,6 +1043,11 @@ function XPBar({ taskXP, subtaskXP, subtaskStreak }: {
           <span className="streak-label"> subtasks today</span>
         </div>
       </div>
+      <div className="xp-divider" />
+      <button className="achievements-peek" onClick={onShowAchievements}>
+        <span>🏅 Achievements</span>
+        <span className="achievements-peek-count">{unlockedCount}/{totalCount}</span>
+      </button>
     </div>
   );
 }
@@ -761,6 +1085,33 @@ export default function App() {
   });
   const [timers, setTimers] = useState<Record<string, ActiveTimer>>({});
   const [subtaskTimers, setSubtaskTimers] = useState<Record<string, ActiveTimer>>({});
+  const [theme, setTheme] = useState<ThemeMode>(() =>
+    (localStorage.getItem("taskflow-theme") as ThemeMode) || "dark"
+  );
+  const [achievements, setAchievements] = useState<Achievement[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("taskflow-achievements") || "[]") as Achievement[];
+      // Merge saved with defs so new achievements always appear
+      return ACHIEVEMENT_DEFS.map(def => ({ ...def, unlockedAt: saved.find(s => s.id === def.id)?.unlockedAt ?? null }));
+    } catch { return ACHIEVEMENT_DEFS.map(def => ({ ...def, unlockedAt: null })); }
+  });
+  const [unlockedBadge, setUnlockedBadge] = useState<Achievement | null>(null);
+  const [showAchievements, setShowAchievements] = useState(false);
+  const [showFocusMode, setShowFocusMode] = useState(false);
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState<TaskTemplate[]>(() => {
+    try { return JSON.parse(localStorage.getItem("taskflow-templates") || JSON.stringify(DEFAULT_TEMPLATES)); }
+    catch { return DEFAULT_TEMPLATES; }
+  });
+  const [showWeeklyReview, setShowWeeklyReview] = useState(false);
+  const [brainDumpCount, setBrainDumpCount] = useState<number>(() =>
+    parseInt(localStorage.getItem("taskflow-dump-count") || "0")
+  );
+  const [dailyStreak, setDailyStreak] = useState<{ days: string[] }>(() => {
+    try { return JSON.parse(localStorage.getItem("taskflow-daily-streak") || '{"days":[]}'); }
+    catch { return { days: [] }; }
+  });
   const inputRef = useRef<HTMLInputElement>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -768,6 +1119,13 @@ export default function App() {
   useEffect(() => { localStorage.setItem("taskflow-task-xp", String(taskXP)); }, [taskXP]);
   useEffect(() => { localStorage.setItem("taskflow-subtask-xp", String(subtaskXP)); }, [subtaskXP]);
   useEffect(() => { localStorage.setItem("taskflow-subtask-streak", JSON.stringify(subtaskStreak)); }, [subtaskStreak]);
+  useEffect(() => { localStorage.setItem("taskflow-theme", theme); document.documentElement.setAttribute("data-theme", theme); }, [theme]);
+  useEffect(() => { localStorage.setItem("taskflow-achievements", JSON.stringify(achievements)); }, [achievements]);
+  useEffect(() => { localStorage.setItem("taskflow-templates", JSON.stringify(templates)); }, [templates]);
+  useEffect(() => { localStorage.setItem("taskflow-dump-count", String(brainDumpCount)); }, [brainDumpCount]);
+  useEffect(() => { localStorage.setItem("taskflow-daily-streak", JSON.stringify(dailyStreak)); }, [dailyStreak]);
+  // Apply theme on mount
+  useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, []);
   useEffect(() => { requestNotificationPermission(); }, []);
 
   // Recurring reset
@@ -810,6 +1168,7 @@ export default function App() {
             if (t.mode === "pomodoro") {
               if (t.phase === "work") {
                 sendNotification("🍅 Pomodoro Done!", "Time for a 5-minute break!");
+                unlockAchievement("pomo_1");
                 next[id] = { ...t, elapsed: 0, phase: "break", target: POMODORO_BREAK, startedAt: Date.now(), pomodoroCount: t.pomodoroCount + 1 };
               } else {
                 sendNotification("☕ Break Over!", "Ready for the next focus session?");
@@ -852,6 +1211,17 @@ export default function App() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
   }, []);
 
+  const unlockAchievement = useCallback((id: string) => {
+    setAchievements(prev => {
+      const ach = prev.find(a => a.id === id);
+      if (!ach || ach.unlockedAt) return prev; // already unlocked
+      const updated = prev.map(a => a.id === id ? { ...a, unlockedAt: Date.now() } : a);
+      const unlocked = updated.find(a => a.id === id)!;
+      setTimeout(() => setUnlockedBadge(unlocked), 100);
+      return updated;
+    });
+  }, []);
+
   const allTags = Array.from(new Set(todos.flatMap(t => t.tags)));
 
   const addTodo = () => {
@@ -870,7 +1240,40 @@ export default function App() {
     setTodos(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
     if (!wasCompleted) {
       setCelebration(true);
-      setTaskXP(prev => prev + TASK_XP);
+      const newXP = taskXP + TASK_XP;
+      setTaskXP(newXP);
+      // Count completed after this toggle
+      const completedCount = todos.filter(t => t.completed).length + 1;
+      if (completedCount >= 1)   unlockAchievement("task_1");
+      if (completedCount >= 10)  unlockAchievement("task_10");
+      if (completedCount >= 50)  unlockAchievement("task_50");
+      if (completedCount >= 100) unlockAchievement("task_100");
+      // Level milestones
+      const newLevel = Math.floor(newXP / 100) + 1;
+      if (newLevel >= 5)  unlockAchievement("lvl_5");
+      if (newLevel >= 10) unlockAchievement("lvl_10");
+      if (newLevel >= 20) unlockAchievement("lvl_20");
+      // Speed: 5 tasks in one day
+      const todayStr = today();
+      const todayDone = todos.filter(t => t.completed && new Date(t.createdAt).toISOString().slice(0,10) === todayStr).length + 1;
+      if (todayDone >= 5) unlockAchievement("speed_5");
+      // Daily streak tracking
+      setDailyStreak(prev => {
+        const days = prev.days.includes(todayStr) ? prev.days : [...prev.days, todayStr].slice(-35);
+        // Check consecutive streak
+        const sorted = [...days].sort();
+        let streak = 1, max = 1;
+        for (let i = sorted.length - 1; i > 0; i--) {
+          const d1 = new Date(sorted[i]), d2 = new Date(sorted[i-1]);
+          const diff = (d1.getTime() - d2.getTime()) / 86400000;
+          if (diff === 1) { streak++; max = Math.max(max, streak); } else break;
+        }
+        if (max >= 3)  unlockAchievement("streak_3");
+        if (max >= 7)  unlockAchievement("streak_7");
+        if (max >= 14) unlockAchievement("streak_14");
+        if (max >= 30) unlockAchievement("streak_30");
+        return { days };
+      });
     }
   };
 
@@ -938,8 +1341,14 @@ export default function App() {
       const t = prev[todoId];
       if (!t) return prev;
       const elapsed = t.elapsed;
-      // Save elapsed time to todo
-      setTodos(todos => todos.map(td => td.id === todoId ? { ...td, totalTimeMs: (td.totalTimeMs || 0) + elapsed - (prev[todoId]?.elapsed || 0) } : td));
+      setTodos(todos => {
+        const updated = todos.map(td => td.id === todoId ? { ...td, totalTimeMs: (td.totalTimeMs || 0) + elapsed - (prev[todoId]?.elapsed || 0) } : td);
+        // Check total time across all tasks
+        const totalMs = updated.reduce((a, td) => a + (td.totalTimeMs || 0), 0);
+        if (totalMs >= 3600000)  unlockAchievement("time_1hr");
+        if (totalMs >= 36000000) unlockAchievement("time_10hr");
+        return updated;
+      });
       return { ...prev, [todoId]: { ...t, running: false, startedAt: null } };
     });
   };
@@ -1032,7 +1441,27 @@ export default function App() {
   const brainDumpCapture = (items: string[]) => {
     const newTodos: Todo[] = items.map(text => ({ id: crypto.randomUUID(), text, notes: "", completed: false, priority: "medium", dueDate: "", tags: [], subtasks: [], recur: "none", lastReset: today(), createdAt: Date.now(), totalTimeMs: 0, timeGoalMs: 0 }));
     setTodos(prev => [...newTodos, ...prev]);
+    const newCount = brainDumpCount + 1;
+    setBrainDumpCount(newCount);
+    if (newCount >= 1)  unlockAchievement("dump_1");
+    if (newCount >= 10) unlockAchievement("dump_10");
     showToast(`Captured ${newTodos.length} task${newTodos.length > 1 ? "s" : ""} from brain dump`);
+  };
+
+  const applyTemplate = (tpl: TaskTemplate) => {
+    const newTodo: Todo = {
+      id: crypto.randomUUID(), text: tpl.name, notes: tpl.notes,
+      completed: false, priority: tpl.priority, dueDate: "",
+      tags: [...tpl.tags], recur: "none", lastReset: today(),
+      createdAt: Date.now(), totalTimeMs: 0, timeGoalMs: 0,
+      subtasks: tpl.subtaskTexts.map(st => ({
+        id: crypto.randomUUID(), text: st, completed: false,
+        priority: "medium", dueDate: "", createdAt: Date.now(), totalTimeMs: 0,
+      })),
+    };
+    setTodos(prev => [newTodo, ...prev]);
+    setShowTemplates(false);
+    showToast(`Created task from template: ${tpl.name}`);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -1078,7 +1507,13 @@ export default function App() {
     <div className="app">
       {/* Sidebar */}
       <div className="sidebar">
-        <div className="brand"><span className="brand-icon">▣</span><span className="brand-name">TaskFlow</span></div>
+        <div className="brand">
+          <span className="brand-icon">▣</span>
+          <span className="brand-name">TaskFlow</span>
+          <button className="theme-toggle" onClick={() => setTheme(t => t === "dark" ? "light" : "dark")} title="Toggle theme">
+            {theme === "dark" ? "☀️" : "🌙"}
+          </button>
+        </div>
         <nav className="nav">
           {(["all","active","done"] as Filter[]).map(f => (
             <button key={f} className={`nav-btn ${filter === f && !tagFilter ? "active" : ""}`}
@@ -1112,10 +1547,16 @@ export default function App() {
           </div>
         )}
 
-        <XPBar taskXP={taskXP} subtaskXP={subtaskXP} subtaskStreak={subtaskStreak} />
+        <XPBar taskXP={taskXP} subtaskXP={subtaskXP} subtaskStreak={subtaskStreak}
+          unlockedCount={achievements.filter(a=>a.unlockedAt).length}
+          totalCount={achievements.length}
+          onShowAchievements={() => setShowAchievements(true)} />
 
         <div className="sidebar-actions">
           <button className="sidebar-action-btn" onClick={() => setShowBrainDump(true)}>🧠 Brain Dump <kbd>B</kbd></button>
+          <button className="sidebar-action-btn" onClick={() => setShowFocusMode(true)}>🎯 Focus Mode</button>
+          <button className="sidebar-action-btn" onClick={() => setShowTemplates(true)}>📋 Templates</button>
+          <button className="sidebar-action-btn" onClick={() => setShowWeeklyReview(true)}>📆 Weekly Review</button>
           <button className="sidebar-action-btn" onClick={() => setShowStats(s => !s)}>📊 Stats</button>
           <button className="sidebar-action-btn" onClick={exportCSV}>⬇ Export CSV</button>
           <button className="sidebar-action-btn" onClick={copyToClipboard}>⎘ Copy List</button>
@@ -1245,6 +1686,32 @@ export default function App() {
 
       {/* Brain Dump */}
       {showBrainDump && <BrainDump onClose={() => setShowBrainDump(false)} onCapture={brainDumpCapture} />}
+
+      {/* Badge Unlock */}
+      {unlockedBadge && <BadgeUnlock achievement={unlockedBadge} onDone={() => setUnlockedBadge(null)} />}
+
+      {/* Achievements */}
+      {showAchievements && <AchievementsPanel achievements={achievements} onClose={() => setShowAchievements(false)} />}
+
+      {/* Focus Mode */}
+      {showFocusMode && (
+        <FocusMode todos={todos} focusId={focusTaskId}
+          onSetFocus={setFocusTaskId} onToggle={toggleTodo} onClose={() => setShowFocusMode(false)} />
+      )}
+
+      {/* Templates */}
+      {showTemplates && (
+        <TemplatesModal templates={templates} onApply={applyTemplate}
+          onDelete={id => setTemplates(prev => prev.filter(t => t.id !== id))}
+          onAdd={t => setTemplates(prev => [...prev, t])}
+          onClose={() => setShowTemplates(false)} />
+      )}
+
+      {/* Weekly Review */}
+      {showWeeklyReview && (
+        <WeeklyReview todos={todos} taskXP={taskXP} subtaskXP={subtaskXP}
+          achievements={achievements} onClose={() => setShowWeeklyReview(false)} />
+      )}
 
       {/* Shortcuts */}
       {showShortcuts && (

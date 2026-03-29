@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors, DragEndEvent,
@@ -172,6 +173,130 @@ function shouldRecurReset(todo: Todo) {
   if (todo.recur === "daily") return now.toDateString() !== last.toDateString();
   if (todo.recur === "weekly") return (now.getTime() - last.getTime()) / 86400000 >= 7;
   return false;
+}
+
+// ─── Greeting helper ─────────────────────────────────────────────────────────
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+// ─── OnboardingFlow ───────────────────────────────────────────────────────────
+function OnboardingFlow({ onComplete }: { onComplete: (name: string) => void }) {
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState("");
+  const [tooltipStep, setTooltipStep] = useState(0);
+  const [error, setError] = useState("");
+
+  const features = [
+    { icon: "✅", title: "Capture tasks instantly", desc: "Before they slip away from your mind. Add priorities, due dates, tags and notes." },
+    { icon: "⏱", title: "Focus with Pomodoro timers", desc: "Built-in timers on every task. Work in focused sprints and take structured breaks." },
+    { icon: "🏆", title: "Earn XP and level up", desc: "Every task you complete earns XP. Build streaks, unlock achievements, stay motivated." },
+  ];
+
+  const tooltips = [
+    { text: "Type your task here and press Enter to add it instantly.", highlight: "Add your first task here ↑", icon: "✏️" },
+    { text: "Use the sidebar to filter tasks, browse by tag, and access all app features.", highlight: "Explore the sidebar →", icon: "🗂" },
+    { text: "Your XP and level appear here. Complete tasks to level up and unlock achievements!", highlight: "Watch your XP grow ↓", icon: "⭐" },
+  ];
+
+  return (
+    <div className="onboarding-overlay">
+      <div className="onboarding-card">
+
+        {/* ── Step 0: Name ── */}
+        {step === 0 && (
+          <div className="onboarding-step">
+            <div className="onboarding-logo">
+              <span className="onboarding-logo-icon">▣</span>
+              <span className="onboarding-logo-name">TaskFlow</span>
+            </div>
+            <div className="onboarding-emoji">👋</div>
+            <h2 className="onboarding-title">Welcome to TaskFlow!</h2>
+            <p className="onboarding-subtitle">Let's get you set up. What should we call you?</p>
+            <input
+              className="onboarding-input"
+              placeholder="Your first name…"
+              value={name}
+              onChange={e => { setName(e.target.value); setError(""); }}
+              onKeyDown={e => e.key === "Enter" && name.trim() && setStep(1)}
+              autoFocus
+            />
+            {error && <p className="onboarding-error">{error}</p>}
+            <button className="onboarding-btn" onClick={() => {
+              if (!name.trim()) { setError("Please enter your name to continue."); return; }
+              setStep(1);
+            }}>
+              Let's go →
+            </button>
+          </div>
+        )}
+
+        {/* ── Step 1: Features ── */}
+        {step === 1 && (
+          <div className="onboarding-step">
+            <div className="onboarding-emoji">🚀</div>
+            <h2 className="onboarding-title">Hi {name}! Here's what TaskFlow does</h2>
+            <p className="onboarding-subtitle">Built specifically for ADHD minds that need structure and momentum.</p>
+            <div className="onboarding-features">
+              {features.map((f, i) => (
+                <div key={i} className="onboarding-feature">
+                  <span className="onboarding-feature-icon">{f.icon}</span>
+                  <div>
+                    <div className="onboarding-feature-title">{f.title}</div>
+                    <div className="onboarding-feature-desc">{f.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button className="onboarding-btn" onClick={() => setStep(2)}>
+              Got it, show me around →
+            </button>
+            <button className="onboarding-skip" onClick={() => onComplete(name.trim())}>Skip tour</button>
+          </div>
+        )}
+
+        {/* ── Step 2: Tooltip tour ── */}
+        {step === 2 && (
+          <div className="onboarding-step">
+            <div className="onboarding-emoji">{tooltips[tooltipStep].icon}</div>
+            <div className="onboarding-tour-progress">
+              {tooltips.map((_, i) => (
+                <div key={i} className={`onboarding-tour-dot ${i <= tooltipStep ? "active" : ""}`} />
+              ))}
+            </div>
+            <h2 className="onboarding-title">{tooltips[tooltipStep].highlight}</h2>
+            <p className="onboarding-subtitle">{tooltips[tooltipStep].text}</p>
+            <button className="onboarding-btn" onClick={() => {
+              if (tooltipStep < tooltips.length - 1) setTooltipStep(t => t + 1);
+              else setStep(3);
+            }}>
+              {tooltipStep < tooltips.length - 1 ? "Next →" : "Almost done →"}
+            </button>
+            <button className="onboarding-skip" onClick={() => onComplete(name.trim())}>Skip</button>
+          </div>
+        )}
+
+        {/* ── Step 3: First task ── */}
+        {step === 3 && (
+          <div className="onboarding-step">
+            <div className="onboarding-emoji">🎯</div>
+            <h2 className="onboarding-title">You're all set, {name}!</h2>
+            <p className="onboarding-subtitle">
+              What's the <strong>one most important thing</strong> you need to get done today?
+            </p>
+            <p className="onboarding-hint">You can add it now or jump straight into the app.</p>
+            <button className="onboarding-btn" onClick={() => onComplete(name.trim())}>
+              Take me to TaskFlow! 🚀
+            </button>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
 }
 
 // ─── ProgressRing ─────────────────────────────────────────────────────────────
@@ -1143,11 +1268,406 @@ function ArchivePanel({ archive, onRestore, onDelete, onClose }: {
   );
 }
 
+// ─── Supabase Client ──────────────────────────────────────────────────────────
+// Make sure you have a .env file in your project root with:
+//   VITE_SUPABASE_URL=https://your-project.supabase.co
+//   VITE_SUPABASE_ANON_KEY=your-anon-key
+const supabase = createClient(
+  (import.meta as unknown as { env: Record<string,string> }).env.VITE_SUPABASE_URL,
+  (import.meta as unknown as { env: Record<string,string> }).env.VITE_SUPABASE_ANON_KEY,
+  {
+    auth: {
+      persistSession: true,
+      storageKey: "taskflow-auth",
+      storage: window.localStorage,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    }
+  }
+);
+
+// ─── AppState (for sync) ──────────────────────────────────────────────────────
+interface AppState {
+  todos: Todo[]; taskXP: number; subtaskXP: number;
+  subtaskStreak: { count: number; date: string };
+  achievements: Achievement[]; archive: ArchivedTodo[];
+  brainDumpCount: number; dailyStreak: { days: string[] };
+  templates: TaskTemplate[]; theme: ThemeMode;
+  userName: string; onboardingComplete: boolean;
+}
+
+// ─── useSupabaseSync ──────────────────────────────────────────────────────────
+function useSupabaseSync() {
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [loadingData, setLoadingData] = useState(false);
+  const [initialData, setInitialData] = useState<AppState | null>(null);
+  const [showReset, setShowReset] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRef = useRef<AppState | null>(null);
+
+  const loadUserData = useCallback(async (uid: string) => {
+    setLoadingData(true);
+    try {
+      const { data, error } = await supabase
+        .from("user_data").select("*").eq("user_id", uid).single();
+      if (error && error.code !== "PGRST116") console.error("Load error:", error.message);
+      if (data) {
+        setInitialData({
+          todos:              data.todos              ?? [],
+          taskXP:             data.task_xp            ?? 0,
+          subtaskXP:          data.subtask_xp         ?? 0,
+          subtaskStreak:      data.subtask_streak     ?? { count: 0, date: "" },
+          achievements:       data.achievements       ?? [],
+          archive:            data.archive            ?? [],
+          brainDumpCount:     data.brain_dump_count   ?? 0,
+          dailyStreak:        data.daily_streak       ?? { days: [] },
+          templates:          data.templates          ?? DEFAULT_TEMPLATES,
+          theme:              data.theme              ?? "dark",
+          userName:           data.user_name          ?? "",
+          onboardingComplete: data.onboarding_complete ?? false,
+        });
+      }
+    } finally { setLoadingData(false); }
+  }, []);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) loadUserData(u.id);
+      setLoadingAuth(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const u = session?.user ?? null;
+      if (event === "PASSWORD_RECOVERY") {
+        setShowReset(true);
+        setUser(u);
+        setLoadingAuth(false);
+        return;
+      }
+      setShowReset(false);
+      setUser(u);
+      if (u) loadUserData(u.id);
+      else { setInitialData(null); setLoadingAuth(false); }
+    });
+    return () => subscription.unsubscribe();
+  }, [loadUserData]);
+
+  const saveData = useCallback((state: AppState) => {
+    if (!user) return;
+    pendingRef.current = state;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      const s = pendingRef.current; if (!s || !user) return;
+      try {
+        await supabase.from("user_data").upsert({
+          user_id: user.id, todos: s.todos,
+          task_xp: s.taskXP, subtask_xp: s.subtaskXP,
+          subtask_streak: s.subtaskStreak, achievements: s.achievements,
+          archive: s.archive, brain_dump_count: s.brainDumpCount,
+          daily_streak: s.dailyStreak, templates: s.templates, theme: s.theme,
+          user_name: s.userName, onboarding_complete: s.onboardingComplete,
+        }, { onConflict: "user_id" });
+      } catch (err) { console.error("Save error:", err); }
+    }, 1500);
+  }, [user]);
+
+  const signOut = useCallback(async () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    await supabase.auth.signOut();
+  }, []);
+
+  return { user, loadingAuth, loadingData, initialData, saveData, signOut, showReset, setShowReset };
+}
+
+// ─── ResetPasswordModal ───────────────────────────────────────────────────────
+function ResetPasswordModal({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    setError(null);
+    if (!password.trim()) { setError("Please enter a new password."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirm) { setError("Passwords don't match."); return; }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      setInfo("Password updated! Signing you in…");
+      setTimeout(onDone, 1500);
+    } catch (err: unknown) {
+      setError((err as { message?: string })?.message ?? "Something went wrong.");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="auth-overlay">
+      <div className="auth-modal">
+        <div className="auth-brand">
+          <span className="auth-brand-icon">▣</span>
+          <span className="auth-brand-name">TaskFlow</span>
+        </div>
+        <h2 className="auth-title">Set new password</h2>
+        <p className="auth-subtitle">Choose a strong password for your account.</p>
+        {error && <div className="auth-error">{error}</div>}
+        {info  && <div className="auth-info">{info}</div>}
+        <div className="auth-fields">
+          <input className="auth-input" type="password" placeholder="New password"
+            value={password} onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && submit()} autoFocus />
+          <input className="auth-input" type="password" placeholder="Confirm new password"
+            value={confirm} onChange={e => setConfirm(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && submit()} />
+        </div>
+        <button className="auth-submit" onClick={submit} disabled={loading}>
+          {loading ? <span className="auth-spinner" /> : "Update Password"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── AuthModal ────────────────────────────────────────────────────────────────
+function AuthModal() {
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const reset = () => { setError(null); setInfo(null); };
+
+  const submit = async () => {
+    reset();
+    setLoading(true);
+    try {
+      if (mode === "forgot") {
+        if (!email.trim()) { setError("Please enter your email address."); setLoading(false); return; }
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin,
+        });
+        if (error) throw error;
+        setInfo("Check your email for a password reset link!");
+      } else if (mode === "signup") {
+        if (!email.trim() || !password.trim()) { setError("Please enter your email and password."); setLoading(false); return; }
+        if (password.length < 6) { setError("Password must be at least 6 characters."); setLoading(false); return; }
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        setInfo("Account created! You can now sign in.");
+        setMode("signin");
+      } else {
+        if (!email.trim() || !password.trim()) { setError("Please enter your email and password."); setLoading(false); return; }
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (err: unknown) {
+      setError((err as { message?: string })?.message ?? "Something went wrong.");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="auth-overlay">
+      <div className="auth-modal">
+        <div className="auth-brand">
+          <span className="auth-brand-icon">▣</span>
+          <span className="auth-brand-name">TaskFlow</span>
+        </div>
+        <h2 className="auth-title">
+          {mode === "signin" ? "Welcome back" : mode === "signup" ? "Create an account" : "Reset password"}
+        </h2>
+        <p className="auth-subtitle">
+          {mode === "signin"  ? "Sign in to access your tasks from anywhere."
+          : mode === "signup" ? "Your data will sync across all your devices."
+          : "Enter your email and we'll send you a reset link."}
+        </p>
+        {error && <div className="auth-error">{error}</div>}
+        {info  && <div className="auth-info">{info}</div>}
+        <div className="auth-fields">
+          <input className="auth-input" type="email" placeholder="Email" value={email}
+            onChange={e => setEmail(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && submit()} autoFocus />
+          {mode !== "forgot" && (
+            <input className="auth-input" type="password" placeholder="Password" value={password}
+              onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && submit()} />
+          )}
+        </div>
+        {mode === "signin" && (
+          <div style={{ textAlign: "right", marginTop: "-0.25rem" }}>
+            <button className="auth-switch-btn" style={{ fontSize: "0.75rem" }}
+              onClick={() => { setMode("forgot"); reset(); }}>
+              Forgot password?
+            </button>
+          </div>
+        )}
+        <button className="auth-submit" onClick={submit} disabled={loading}>
+          {loading ? <span className="auth-spinner" />
+            : mode === "signin"  ? "Sign In"
+            : mode === "signup"  ? "Create Account"
+            : "Send Reset Link"}
+        </button>
+        <p className="auth-switch">
+          {mode === "forgot" ? (
+            <>Remember your password? <button className="auth-switch-btn"
+              onClick={() => { setMode("signin"); reset(); }}>Sign in</button></>
+          ) : mode === "signin" ? (
+            <>Don't have an account? <button className="auth-switch-btn"
+              onClick={() => { setMode("signup"); reset(); }}>Sign up</button></>
+          ) : (
+            <>Already have one? <button className="auth-switch-btn"
+              onClick={() => { setMode("signin"); reset(); }}>Sign in</button></>
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+
+// ─── AIFocusSuggest ───────────────────────────────────────────────────────────
+interface AIsuggestion { id: string; reason: string; }
+
+function AIFocusSuggest({ todos }: { todos: Todo[] }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState<AIsuggestion[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [lastFetched, setLastFetched] = useState<string | null>(null);
+
+  const activeTodos = todos.filter(t => !t.completed);
+
+  const getSuggestions = async () => {
+    if (activeTodos.length === 0) { setSuggestions([]); return; }
+    setLoading(true); setError(null); setSuggestions(null);
+    const taskList = activeTodos.map(t => ({
+      id: t.id, text: t.text, priority: t.priority,
+      dueDate: t.dueDate || null,
+      overdue: !!t.dueDate && t.dueDate < today(),
+      subtasksDone: t.subtasks.filter(s => s.completed).length,
+      subtasksTotal: t.subtasks.length,
+      timeLoggedMs: t.totalTimeMs || 0,
+      tags: t.tags,
+    }));
+    try {
+      const supabaseAnonKey = (import.meta as unknown as { env: Record<string,string> }).env.VITE_SUPABASE_ANON_KEY;
+      const res = await fetch("https://tsyjhicnbtegmgbmvqam.supabase.co/functions/v1/ai-focus", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${supabaseAnonKey}`,
+          "apikey": supabaseAnonKey,
+        },
+        body: JSON.stringify({
+          system: `You are a productivity coach helping someone with ADHD decide what to focus on today. Analyze their task list and return the top 3 most important tasks. Prioritize: overdue tasks, high-priority tasks, tasks already in progress (partial subtasks done). Keep reasons short, direct, and motivating — max 12 words. Respond ONLY with valid JSON — no markdown, no preamble — in this exact format: {"suggestions":[{"id":"task_id","reason":"short motivating reason"}]}`,
+          messages: [{ role: "user", content: `Today is ${today()}. Here are my active tasks:\n${JSON.stringify(taskList, null, 2)}\n\nPick my top 3 focus tasks.` }],
+        }),
+      });
+      const data = await res.json();
+      const raw = data.content?.find((b: { type: string }) => b.type === "text")?.text ?? "";
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      setSuggestions(parsed.suggestions ?? []);
+      setLastFetched(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    } catch {
+      setError("Couldn't reach AI. Check your connection and try again.");
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => {
+    if (open && suggestions === null && !loading) getSuggestions();
+  }, [open]);
+
+  const suggestedTodos = suggestions
+    ?.map(s => ({ ...s, todo: activeTodos.find(t => t.id === s.id) }))
+    .filter((s): s is AIsuggestion & { todo: Todo } => !!s.todo) ?? [];
+
+  const medals = ["🥇", "🥈", "🥉"];
+
+  return (
+    <>
+      <button
+        className={`ai-focus-fab ${open ? "open" : ""}`}
+        onClick={() => setOpen(o => !o)}
+        title="AI Daily Focus"
+        aria-label={open ? "Close AI Focus panel" : "Open AI Daily Focus"}
+      >
+        <span className="ai-fab-icon">{open ? "✕" : "✨"}</span>
+        <span className="ai-fab-label">{open ? "Close" : "Focus AI"}</span>
+      </button>
+
+      {open && (
+        <div className="ai-focus-panel" role="dialog" aria-label="AI Daily Focus suggestions">
+          <div className="ai-focus-header">
+            <div>
+              <h3 className="ai-focus-title">✨ Today's Focus</h3>
+              <p className="ai-focus-sub">{lastFetched ? `Updated ${lastFetched}` : "AI-picked tasks for right now"}</p>
+            </div>
+            <button className="ai-refresh-btn" onClick={getSuggestions} disabled={loading} title="Refresh suggestions">
+              <span className={loading ? "ai-refresh-spinning" : ""}>↺</span>
+            </button>
+          </div>
+          {loading && (
+            <div className="ai-loading">
+              <div className="ai-spinner" />
+              <span>Analyzing your {activeTodos.length} tasks…</span>
+            </div>
+          )}
+          {!loading && error && (
+            <div className="ai-error-box">
+              <span>⚠</span><p>{error}</p>
+              <button className="ai-retry-btn" onClick={getSuggestions}>Retry</button>
+            </div>
+          )}
+          {!loading && !error && activeTodos.length === 0 && (
+            <div className="ai-empty">
+              <span className="ai-empty-icon">🎉</span>
+              <p>No active tasks! Add some tasks first.</p>
+            </div>
+          )}
+          {!loading && !error && suggestedTodos.map((s, i) => {
+            const isOverdue = !!s.todo.dueDate && s.todo.dueDate < today();
+            const subDone = s.todo.subtasks.filter(st => st.completed).length;
+            const subTotal = s.todo.subtasks.length;
+            return (
+              <div key={s.id} className={`ai-task-card ai-rank-${i}`}>
+                <div className="ai-task-medal">{medals[i]}</div>
+                <div className="ai-task-body">
+                  <div className="ai-task-top">
+                    <span className="ai-priority-dot" style={{ background: PRIORITY_CONFIG[s.todo.priority].dot }} />
+                    <span className="ai-task-text">{s.todo.text}</span>
+                  </div>
+                  <div className="ai-task-meta">
+                    {s.todo.dueDate && (
+                      <span className={`ai-task-due ${isOverdue ? "overdue" : ""}`}>
+                        {isOverdue ? "⚠ Overdue" : `📅 Due ${s.todo.dueDate}`}
+                      </span>
+                    )}
+                    {subTotal > 0 && <span className="ai-task-progress">◎ {subDone}/{subTotal} done</span>}
+                    {s.todo.tags.length > 0 && <span className="ai-task-tag">#{s.todo.tags[0]}</span>}
+                  </div>
+                  <p className="ai-task-reason">"{s.reason}"</p>
+                </div>
+              </div>
+            );
+          })}
+          {!loading && suggestedTodos.length > 0 && (
+            <p className="ai-focus-footer">💡 Try tackling just one. You've got this.</p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [todos, setTodos] = useState<Todo[]>(() => {
-    try { return JSON.parse(localStorage.getItem("taskflow-todos") || "[]"); } catch { return []; }
-  });
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [text, setText] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [dueDate, setDueDate] = useState("");
@@ -1165,63 +1685,74 @@ export default function App() {
   const [showBrainDump, setShowBrainDump] = useState(false);
   const [celebration, setCelebration] = useState(false);
   const [subtaskRewards, setSubtaskRewards] = useState<SubtaskReward[]>([]);
-  const [taskXP, setTaskXP] = useState<number>(() => {
-    try { return parseInt(localStorage.getItem("taskflow-task-xp") || "0"); } catch { return 0; }
-  });
-  const [subtaskXP, setSubtaskXP] = useState<number>(() => {
-    try { return parseInt(localStorage.getItem("taskflow-subtask-xp") || "0"); } catch { return 0; }
-  });
-  const [subtaskStreak, setSubtaskStreak] = useState<{ count: number; date: string }>(() => {
-    try { return JSON.parse(localStorage.getItem("taskflow-subtask-streak") || '{"count":0,"date":""}'); } catch { return { count: 0, date: "" }; }
-  });
+  const [taskXP, setTaskXP] = useState<number>(0);
+  const [subtaskXP, setSubtaskXP] = useState<number>(0);
+  const [subtaskStreak, setSubtaskStreak] = useState<{ count: number; date: string }>({ count: 0, date: "" });
   const [timers, setTimers] = useState<Record<string, ActiveTimer>>({});
   const [subtaskTimers, setSubtaskTimers] = useState<Record<string, ActiveTimer>>({});
-  const [archive, setArchive] = useState<ArchivedTodo[]>(() => {
-    try { return JSON.parse(localStorage.getItem("taskflow-archive") || "[]"); } catch { return []; }
-  });
+  const [archive, setArchive] = useState<ArchivedTodo[]>([]);
   const [showArchive, setShowArchive] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>(() =>
-    (localStorage.getItem("taskflow-theme") as ThemeMode) || "dark"
+  const [theme, setTheme] = useState<ThemeMode>("dark");
+  const [achievements, setAchievements] = useState<Achievement[]>(
+    ACHIEVEMENT_DEFS.map(def => ({ ...def, unlockedAt: null }))
   );
-  const [achievements, setAchievements] = useState<Achievement[]>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("taskflow-achievements") || "[]") as Achievement[];
-      // Merge saved with defs so new achievements always appear
-      return ACHIEVEMENT_DEFS.map(def => ({ ...def, unlockedAt: saved.find(s => s.id === def.id)?.unlockedAt ?? null }));
-    } catch { return ACHIEVEMENT_DEFS.map(def => ({ ...def, unlockedAt: null })); }
-  });
   const [unlockedBadge, setUnlockedBadge] = useState<Achievement | null>(null);
   const [showAchievements, setShowAchievements] = useState(false);
   const [showFocusMode, setShowFocusMode] = useState(false);
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
-  const [templates, setTemplates] = useState<TaskTemplate[]>(() => {
-    try { return JSON.parse(localStorage.getItem("taskflow-templates") || JSON.stringify(DEFAULT_TEMPLATES)); }
-    catch { return DEFAULT_TEMPLATES; }
-  });
+  const [templates, setTemplates] = useState<TaskTemplate[]>(DEFAULT_TEMPLATES);
   const [showWeeklyReview, setShowWeeklyReview] = useState(false);
-  const [brainDumpCount, setBrainDumpCount] = useState<number>(() =>
-    parseInt(localStorage.getItem("taskflow-dump-count") || "0")
-  );
-  const [dailyStreak, setDailyStreak] = useState<{ days: string[] }>(() => {
-    try { return JSON.parse(localStorage.getItem("taskflow-daily-streak") || '{"days":[]}'); }
-    catch { return { days: [] }; }
-  });
+  const [brainDumpCount, setBrainDumpCount] = useState<number>(0);
+  const [dailyStreak, setDailyStreak] = useState<{ days: string[] }>({ days: [] });
   const inputRef = useRef<HTMLInputElement>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  useEffect(() => { localStorage.setItem("taskflow-todos", JSON.stringify(todos)); }, [todos]);
-  useEffect(() => { localStorage.setItem("taskflow-archive", JSON.stringify(archive)); }, [archive]);
-  useEffect(() => { localStorage.setItem("taskflow-task-xp", String(taskXP)); }, [taskXP]);
-  useEffect(() => { localStorage.setItem("taskflow-subtask-xp", String(subtaskXP)); }, [subtaskXP]);
-  useEffect(() => { localStorage.setItem("taskflow-subtask-streak", JSON.stringify(subtaskStreak)); }, [subtaskStreak]);
-  useEffect(() => { localStorage.setItem("taskflow-theme", theme); document.documentElement.setAttribute("data-theme", theme); }, [theme]);
-  useEffect(() => { localStorage.setItem("taskflow-achievements", JSON.stringify(achievements)); }, [achievements]);
-  useEffect(() => { localStorage.setItem("taskflow-templates", JSON.stringify(templates)); }, [templates]);
-  useEffect(() => { localStorage.setItem("taskflow-dump-count", String(brainDumpCount)); }, [brainDumpCount]);
-  useEffect(() => { localStorage.setItem("taskflow-daily-streak", JSON.stringify(dailyStreak)); }, [dailyStreak]);
-  // Apply theme on mount
-  useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, []);
+  const { user, loadingAuth, loadingData, initialData, saveData, signOut, showReset, setShowReset } = useSupabaseSync();
+
+  // Load data from Supabase when user signs in
+  useEffect(() => {
+    if (!initialData) return;
+    setTodos(initialData.todos);
+    setTaskXP(initialData.taskXP);
+    setSubtaskXP(initialData.subtaskXP);
+    setSubtaskStreak(initialData.subtaskStreak);
+    setAchievements(prev => ACHIEVEMENT_DEFS.map(def => ({
+      ...def,
+      unlockedAt: initialData.achievements.find((a: Achievement) => a.id === def.id)?.unlockedAt ?? null,
+    })));
+    setArchive(initialData.archive);
+    setBrainDumpCount(initialData.brainDumpCount);
+    setDailyStreak(initialData.dailyStreak);
+    setTemplates(initialData.templates.length ? initialData.templates : DEFAULT_TEMPLATES);
+    setTheme(initialData.theme);
+    setUserName(initialData.userName ?? "");
+    setOnboardingComplete(initialData.onboardingComplete ?? false);
+    if (!initialData.onboardingComplete) setShowOnboarding(true);
+  }, [initialData]);
+
+  // Guard: only save AFTER initial data has loaded — prevents race condition
+  const dataLoadedRef = useRef(false);
+  useEffect(() => {
+    if (initialData) dataLoadedRef.current = true;
+  }, [initialData]);
+
+  // Save to Supabase whenever state changes (debounced 1.5s)
+  useEffect(() => {
+    if (!user || !dataLoadedRef.current) return;
+    saveData({ todos, taskXP, subtaskXP, subtaskStreak, achievements,
+               archive, brainDumpCount, dailyStreak, templates, theme,
+               userName, onboardingComplete });
+  }, [todos, taskXP, subtaskXP, subtaskStreak, achievements,
+      archive, brainDumpCount, dailyStreak, templates, theme,
+      userName, onboardingComplete]);
+
+  // Apply theme to document
+  useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, [theme]);
   useEffect(() => { requestNotificationPermission(); }, []);
 
   // Recurring reset
@@ -1652,10 +2183,39 @@ export default function App() {
   const overdueCount = todos.filter(t => t.dueDate && !t.completed && t.dueDate < today()).length;
   const activeTimerCount = Object.values(timers).filter(t => t.running).length;
 
+  // ── Auth gate ────────────────────────────────────────────────────────────────
+  if (loadingAuth || loadingData) {
+    return (
+      <div className="auth-overlay">
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"1rem" }}>
+          <div className="auth-spinner" style={{ width:32, height:32, borderWidth:"3px" as unknown as number }} />
+          <p style={{ color:"var(--text-muted)", fontSize:"0.9rem" }}>Loading your tasks…</p>
+        </div>
+      </div>
+    );
+  }
+  if (showReset) return <ResetPasswordModal onDone={() => { setShowReset(false); }} />;
+  if (!user) return <AuthModal />;
+  if (showOnboarding) return (
+    <OnboardingFlow
+      onComplete={(name) => {
+        setUserName(name);
+        setOnboardingComplete(true);
+        setShowOnboarding(false);
+      }}
+    />
+  );
+
   return (
     <div className="app">
+      {/* Mobile hamburger */}
+      <button className="hamburger" onClick={() => setSidebarOpen(o => !o)} aria-label="Open menu">
+        {sidebarOpen ? "✕" : "☰"}
+      </button>
+      {/* Sidebar overlay */}
+      <div className={`sidebar-overlay ${sidebarOpen ? "open" : ""}`} onClick={() => setSidebarOpen(false)} />
       {/* Sidebar */}
-      <div className="sidebar">
+      <div className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="brand">
           <span className="brand-icon">▣</span>
           <span className="brand-name">TaskFlow</span>
@@ -1666,7 +2226,7 @@ export default function App() {
         <nav className="nav">
           {(["all","active","done"] as Filter[]).map(f => (
             <button key={f} className={`nav-btn ${filter === f && !tagFilter ? "active" : ""}`}
-              onClick={() => { setFilter(f); setTagFilter(null); }}>
+              onClick={() => { setFilter(f); setTagFilter(null); setSidebarOpen(false); }}>
               <span className="nav-icon">{f === "all" ? "≡" : f === "active" ? "◎" : "✓"}</span>
               {f.charAt(0).toUpperCase() + f.slice(1)}
               <span className="nav-count">{f === "all" ? totalCount : f === "active" ? totalCount - doneCount : doneCount}</span>
@@ -1713,6 +2273,9 @@ export default function App() {
           <button className="sidebar-action-btn" onClick={exportCSV}>⬇ Export CSV</button>
           <button className="sidebar-action-btn" onClick={copyToClipboard}>⎘ Copy List</button>
           <button className="sidebar-action-btn" onClick={() => setShowShortcuts(s => !s)}>? Shortcuts</button>
+          <button className="sidebar-action-btn sign-out-btn" onClick={signOut} title={user?.email}>
+            ⎋ Sign Out
+          </button>
         </div>
 
         {doneCount > 0 && (
@@ -1727,7 +2290,9 @@ export default function App() {
         <header className="main-header">
           <div>
             <h1>{tagFilter ? `#${tagFilter}` : filter === "all" ? "All Tasks" : filter === "active" ? "Active Tasks" : "Completed Tasks"}</h1>
-            <p className="header-sub">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
+            <p className="header-sub">
+              {userName ? `${getGreeting()}, ${userName}! · ` : ""}{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+            </p>
           </div>
           <div className="header-controls">
             <input className="search-input" placeholder="Search… (N)" value={search}
@@ -1891,6 +2456,7 @@ export default function App() {
           </div>
         </div>
       )}
+      <AIFocusSuggest todos={todos} />
     </div>
   );
 }

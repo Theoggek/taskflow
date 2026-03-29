@@ -1,0 +1,35 @@
+# Environment variables (NEVER commit these)
+.env
+.env.local
+.env.production
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Vite cache
+.vite/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.log
+# Old backup files
+*.zip
+src/App complete*
+src/App full app*
+src/App make room*
+src/App-without*
+src/App_old*
+src/Old files/
+src/files*
+files/
+files_old.zip
+files complete*
+admin_schema.sql
+src/onboarding_migration.sql

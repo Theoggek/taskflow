@@ -27,6 +27,7 @@ interface Todo {
   priority: Priority; dueDate: string; tags: string[];
   subtasks: Subtask[]; recur: RecurInterval; lastReset: string;
   createdAt: number; totalTimeMs: number; timeGoalMs: number;
+  completedAt: number | null; // timestamp when last marked complete
 }
 
 interface ArchivedTodo extends Todo {
@@ -63,6 +64,7 @@ interface ActiveTimer {
   startedAt: number | null; // Date.now() when last started
   phase: "work" | "break"; pomodoroCount: number;
   countdownMinutes: number;
+  loggedMs?: number; // ms of `elapsed` already committed to totalTimeMs
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -132,16 +134,24 @@ function fmtTime(ms: number) {
 
 function fmtTotalTime(ms: number) {
   if (!ms) return null;
-  const m = Math.floor(ms / 60000);
-  if (m < 60) return `${m}m logged`;
-  return `${Math.floor(m/60)}h ${m%60}m logged`;
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m logged`;
+  if (m > 0) return `${m}m ${s}s logged`;
+  return `${s}s logged`;
 }
 
 function fmtDuration(ms: number) {
   if (!ms) return "0m";
-  const m = Math.floor(ms / 60000);
-  if (m < 60) return `${m}m`;
-  return `${Math.floor(m/60)}h ${m % 60 > 0 ? (m%60)+"m" : ""}`.trim();
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m > 0 ? m+"m" : ""}`.trim();
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 function requestNotificationPermission() {
@@ -816,7 +826,7 @@ function SortableItem({
 // ─── StatsPanel ───────────────────────────────────────────────────────────────
 function StatsPanel({ todos }: { todos: Todo[] }) {
   const weekAgo = Date.now() - 7 * 86400000;
-  const completedThisWeek = todos.filter(t => t.completed && t.createdAt > weekAgo).length;
+  const completedThisWeek = todos.filter(t => t.completed && t.completedAt && t.completedAt > weekAgo).length;
   const overdue = todos.filter(t => t.dueDate && !t.completed && t.dueDate < today()).length;
   const highPriority = todos.filter(t => !t.completed && t.priority === "high").length;
   const total = todos.length; const done = todos.filter(t => t.completed).length;
@@ -1067,13 +1077,13 @@ function WeeklyReview({ todos, taskXP, subtaskXP, achievements, onClose }: {
 }) {
   const weekAgo = Date.now() - 7*86400000;
   const completed = todos.filter(t => t.completed);
-  const completedThisWeek = completed.filter(t => t.createdAt > weekAgo);
+  const completedThisWeek = completed.filter(t => t.completedAt && t.completedAt > weekAgo);
   const totalTimeMs = todos.reduce((a,t) => a+(t.totalTimeMs||0),0) + todos.flatMap(t=>t.subtasks).reduce((a,s)=>a+(s.totalTimeMs||0),0);
   const totalMins = Math.floor(totalTimeMs/60000);
   const unlockedThisWeek = achievements.filter(a => a.unlockedAt && a.unlockedAt > weekAgo);
   const highPriDone = completedThisWeek.filter(t => t.priority==="high").length;
   const dayMap: Record<string,number> = {};
-  completedThisWeek.forEach(t => { const d=new Date(t.createdAt).toLocaleDateString("en-US",{weekday:"short"}); dayMap[d]=(dayMap[d]||0)+1; });
+  completedThisWeek.forEach(t => { const d=new Date(t.completedAt!).toLocaleDateString("en-US",{weekday:"short"}); dayMap[d]=(dayMap[d]||0)+1; });
   const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const maxDay = Math.max(...Object.values(dayMap), 1);
 
@@ -1768,15 +1778,15 @@ export default function App() {
     const autoArchive = () => {
       const now = Date.now();
       setTodos(prev => {
-        const toArchive = prev.filter(t => t.completed && (now - t.createdAt) > SEVEN_DAYS);
+        const toArchive = prev.filter(t => t.completed && t.completedAt && (now - t.completedAt) > SEVEN_DAYS);
         if (toArchive.length === 0) return prev;
         setArchive(arch => {
           const NINETY_DAYS = 90 * 24 * 60 * 60 * 1000;
           const pruned = arch.filter(a => now - a.archivedAt < NINETY_DAYS);
-          const newEntries: ArchivedTodo[] = toArchive.map(t => ({ ...t, archivedAt: now, completedAt: t.createdAt }));
+          const newEntries: ArchivedTodo[] = toArchive.map(t => ({ ...t, archivedAt: now, completedAt: t.completedAt! }));
           return [...pruned, ...newEntries];
         });
-        return prev.filter(t => !(t.completed && (now - t.createdAt) > SEVEN_DAYS));
+        return prev.filter(t => !(t.completed && t.completedAt && (now - t.completedAt) > SEVEN_DAYS));
       });
     };
     autoArchive();
@@ -1818,10 +1828,10 @@ export default function App() {
               if (t.phase === "work") {
                 sendNotification("🍅 Pomodoro Done!", "Time for a 5-minute break!");
                 unlockAchievement("pomo_1");
-                next[id] = { ...t, elapsed: 0, phase: "break", target: POMODORO_BREAK, startedAt: Date.now(), pomodoroCount: t.pomodoroCount + 1 };
+                next[id] = { ...t, elapsed: 0, loggedMs: 0, phase: "break", target: POMODORO_BREAK, startedAt: Date.now(), pomodoroCount: t.pomodoroCount + 1 };
               } else {
                 sendNotification("☕ Break Over!", "Ready for the next focus session?");
-                next[id] = { ...t, elapsed: 0, phase: "work", target: POMODORO_WORK, startedAt: Date.now() };
+                next[id] = { ...t, elapsed: 0, loggedMs: 0, phase: "work", target: POMODORO_WORK, startedAt: Date.now() };
               }
             } else {
               // Countdown done
@@ -1875,7 +1885,7 @@ export default function App() {
 
   const addTodo = () => {
     if (!text.trim()) return;
-    const t: Todo = { id: crypto.randomUUID(), text: text.trim(), notes, completed: false, priority, dueDate, tags: [...tags], subtasks: [], recur, lastReset: today(), createdAt: Date.now(), totalTimeMs: 0, timeGoalMs: 0 };
+    const t: Todo = { id: crypto.randomUUID(), text: text.trim(), notes, completed: false, priority, dueDate, tags: [...tags], subtasks: [], recur, lastReset: today(), createdAt: Date.now(), totalTimeMs: 0, timeGoalMs: 0, completedAt: null };
     setTodos(prev => [t, ...prev]);
     scheduleNotification(t);
     setText(""); setNotes(""); setDueDate(""); setTags([]); setRecur("none");
@@ -1886,7 +1896,8 @@ export default function App() {
   const toggleTodo = (id: string) => {
     const todo = todos.find(t => t.id === id);
     const wasCompleted = todo?.completed;
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+    const completedAt = !wasCompleted ? Date.now() : null;
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed, completedAt } : t));
     if (!wasCompleted) {
       setCelebration(true);
       const newXP = taskXP + TASK_XP;
@@ -1904,7 +1915,7 @@ export default function App() {
       if (newLevel >= 20) unlockAchievement("lvl_20");
       // Speed: 5 tasks in one day
       const todayStr = today();
-      const todayDone = todos.filter(t => t.completed && new Date(t.createdAt).toISOString().slice(0,10) === todayStr).length + 1;
+      const todayDone = todos.filter(t => t.completed && t.completedAt && new Date(t.completedAt).toISOString().slice(0,10) === todayStr).length + 1;
       if (todayDone >= 5) unlockAchievement("speed_5");
       // Daily streak tracking
       setDailyStreak(prev => {
@@ -1940,7 +1951,7 @@ export default function App() {
     setArchive(prev => {
       const NINETY_DAYS = 90 * 24 * 60 * 60 * 1000;
       const pruned = prev.filter(a => now - a.archivedAt < NINETY_DAYS);
-      return [...pruned, { ...todo, archivedAt: now, completedAt: now }];
+      return [...pruned, { ...todo, archivedAt: now, completedAt: todo.completedAt ?? now }];
     });
     setTodos(prev => prev.filter(t => t.id !== id));
     showToast(`Archived "${todo.text}"`, () => {
@@ -1953,7 +1964,7 @@ export default function App() {
     const item = archive.find(a => a.id === id);
     if (!item) return;
     const { archivedAt, completedAt, ...todo } = item;
-    setTodos(prev => [{ ...todo, completed: false }, ...prev]);
+    setTodos(prev => [{ ...todo, completed: false, completedAt: null }, ...prev]);
     setArchive(prev => prev.filter(a => a.id !== id));
     showToast(`Restored "${todo.text}"`);
   };
@@ -2020,16 +2031,16 @@ export default function App() {
     setTimers(prev => {
       const t = prev[todoId];
       if (!t) return prev;
-      const elapsed = t.elapsed;
+      const addedMs = t.elapsed - (t.loggedMs || 0);
       setTodos(todos => {
-        const updated = todos.map(td => td.id === todoId ? { ...td, totalTimeMs: (td.totalTimeMs || 0) + elapsed - (prev[todoId]?.elapsed || 0) } : td);
+        const updated = todos.map(td => td.id === todoId ? { ...td, totalTimeMs: (td.totalTimeMs || 0) + addedMs } : td);
         // Check total time across all tasks
         const totalMs = updated.reduce((a, td) => a + (td.totalTimeMs || 0), 0);
         if (totalMs >= 3600000)  unlockAchievement("time_1hr");
         if (totalMs >= 36000000) unlockAchievement("time_10hr");
         return updated;
       });
-      return { ...prev, [todoId]: { ...t, running: false, startedAt: null } };
+      return { ...prev, [todoId]: { ...t, running: false, startedAt: null, loggedMs: t.elapsed } };
     });
   };
 
@@ -2038,7 +2049,7 @@ export default function App() {
       const t = prev[todoId];
       if (!t) return prev;
       const target = t.mode === "pomodoro" ? POMODORO_WORK : t.mode === "countdown" ? t.countdownMinutes * 60000 : 0;
-      return { ...prev, [todoId]: { ...t, running: false, elapsed: 0, target, startedAt: null, phase: "work" } };
+      return { ...prev, [todoId]: { ...t, running: false, elapsed: 0, loggedMs: 0, target, startedAt: null, phase: "work" } };
     });
   };
 
@@ -2073,7 +2084,7 @@ export default function App() {
     setSubtaskTimers(prev => {
       const t = prev[subtaskId];
       if (!t) return prev;
-      const addedMs = t.elapsed - (prev[subtaskId]?.elapsed || 0);
+      const addedMs = t.elapsed - (t.loggedMs || 0);
       // Accumulate time into subtask AND parent task
       setTodos(todos => todos.map(td => {
         if (td.id !== todoId) return td;
@@ -2085,7 +2096,7 @@ export default function App() {
           )
         };
       }));
-      return { ...prev, [subtaskId]: { ...t, running: false, startedAt: null } };
+      return { ...prev, [subtaskId]: { ...t, running: false, startedAt: null, loggedMs: t.elapsed } };
     });
   };
 
@@ -2094,7 +2105,7 @@ export default function App() {
       const t = prev[subtaskId];
       if (!t) return prev;
       const target = t.mode === "pomodoro" ? POMODORO_WORK : t.mode === "countdown" ? t.countdownMinutes * 60000 : 0;
-      return { ...prev, [subtaskId]: { ...t, running: false, elapsed: 0, target, startedAt: null, phase: "work" } };
+      return { ...prev, [subtaskId]: { ...t, running: false, elapsed: 0, loggedMs: 0, target, startedAt: null, phase: "work" } };
     });
   };
 
@@ -2119,7 +2130,7 @@ export default function App() {
   };
 
   const brainDumpCapture = (items: string[]) => {
-    const newTodos: Todo[] = items.map(text => ({ id: crypto.randomUUID(), text, notes: "", completed: false, priority: "medium", dueDate: "", tags: [], subtasks: [], recur: "none", lastReset: today(), createdAt: Date.now(), totalTimeMs: 0, timeGoalMs: 0 }));
+    const newTodos: Todo[] = items.map(text => ({ id: crypto.randomUUID(), text, notes: "", completed: false, priority: "medium", dueDate: "", tags: [], subtasks: [], recur: "none", lastReset: today(), createdAt: Date.now(), totalTimeMs: 0, timeGoalMs: 0, completedAt: null }));
     setTodos(prev => [...newTodos, ...prev]);
     const newCount = brainDumpCount + 1;
     setBrainDumpCount(newCount);
@@ -2133,7 +2144,7 @@ export default function App() {
       id: crypto.randomUUID(), text: tpl.name, notes: tpl.notes,
       completed: false, priority: tpl.priority, dueDate: "",
       tags: [...tpl.tags], recur: "none", lastReset: today(),
-      createdAt: Date.now(), totalTimeMs: 0, timeGoalMs: 0,
+      createdAt: Date.now(), totalTimeMs: 0, timeGoalMs: 0, completedAt: null,
       subtasks: tpl.subtaskTexts.map(st => ({
         id: crypto.randomUUID(), text: st, completed: false,
         priority: "medium", dueDate: "", createdAt: Date.now(), totalTimeMs: 0,
